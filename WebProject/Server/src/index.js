@@ -9,20 +9,22 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT || 5000);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
-const MAX_PAGES = Number(process.env.MAX_PAGES || 10);
+
+// End after 10 added pages (not counting the start image 0)
+const MAX_ADDED_PAGES = 10;
 
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 
 const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
-  cors: { origin: CLIENT_ORIGIN, credentials: true }
+  cors: { origin: CLIENT_ORIGIN, credentials: true },
 });
 
 // In-memory state
 const state = {
-  pages: [],   // [1..10]
-  isEnd: false
+  pages: [0], // start image always there
+  isEnd: false,
 };
 
 function broadcast() {
@@ -33,50 +35,40 @@ io.on("connection", (socket) => {
   socket.emit("state:update", state);
 });
 
-// Health check
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, state });
-});
-
-// Add a page (auto next if body has no page)
+// 1) ADD: accepts page 1..3 only, duplicates allowed
 app.post("/api/add", (req, res) => {
   if (state.isEnd) return res.json({ ok: false, reason: "ended", state });
 
-  if (state.pages.length >= MAX_PAGES) {
+  const page = Number(req.body?.page);
+
+  // only valid 1..3
+  if (!Number.isInteger(page) || page < 1 || page > 3) {
+    return res.status(400).json({
+      ok: false,
+      reason: "page must be an integer from 1 to 3",
+      state,
+    });
+  }
+
+  const addedCount = state.pages.length - 1; // exclude the 0
+  if (addedCount >= MAX_ADDED_PAGES) {
     state.isEnd = true;
     broadcast();
     return res.json({ ok: true, state });
   }
 
-  let page = Number(req.body?.page);
-
-  if (!Number.isFinite(page) || page < 1) {
-    page = state.pages.length + 1; // auto next
-  }
-
-  if (page > MAX_PAGES) page = MAX_PAGES;
-
-  // If you want STRICT sequential pages only, uncomment:
-  // page = state.pages.length + 1;
-
   state.pages.push(page);
 
-  if (state.pages.length >= MAX_PAGES) state.isEnd = true;
+  const newAddedCount = state.pages.length - 1;
+  if (newAddedCount >= MAX_ADDED_PAGES) state.isEnd = true;
 
   broadcast();
-  res.json({ ok: true, state });
+  return res.json({ ok: true, state });
 });
 
-// End story immediately
-app.post("/api/end", (_req, res) => {
-  state.isEnd = true;
-  broadcast();
-  res.json({ ok: true, state });
-});
-
-// Reset story
+// 2) RESET: clears list but keeps [0]
 app.post("/api/reset", (_req, res) => {
-  state.pages = [];
+  state.pages = [0];
   state.isEnd = false;
   broadcast();
   res.json({ ok: true, state });

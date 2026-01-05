@@ -2,23 +2,43 @@ import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 
 const SERVER_URL = "http://localhost:5000";
-const MAX_PAGES = 10;
+const MAX_ADDED_PAGES = 10; // does NOT include the start image 0
+
+const CAPTIONS = {
+  0: "Our story starts both heros looking at each other and you need to hurry and hit the wachingmachine before its too late",
+  1: "You landed a great punch on the machine great job keep it up",
+  2: "You landed a great Kick on the machine great job keep it up",
+  3: "Why are you standing in place you weak player",
+};
 
 export default function App() {
-  const [pages, setPages] = useState([]); // pages are numbers: [1,2,3...]
+  const [pages, setPages] = useState([0]); // always starts with 0
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isEnd, setIsEnd] = useState(false);
   const [connected, setConnected] = useState(false);
 
   const selectedPage = useMemo(() => {
-    if (pages.length === 0) return null;
+    if (!pages || pages.length === 0) return null;
     return pages[Math.min(selectedIndex, pages.length - 1)];
   }, [pages, selectedIndex]);
+
+  const captionText = useMemo(() => {
+    return selectedPage != null ? (CAPTIONS[selectedPage] || "") : "";
+  }, [selectedPage]);
+
+  // Win/Lose:
+  // WIN if (count(1)+count(2)) > count(3), else LOSE
+  const outcomeText = useMemo(() => {
+    const c1 = pages.filter((p) => p === 1).length;
+    const c2 = pages.filter((p) => p === 2).length;
+    const c3 = pages.filter((p) => p === 3).length;
+    return c1 + c2 > c3 ? "YOU WIN" : "YOU LOSE";
+  }, [pages]);
 
   useEffect(() => {
     const socket = io(SERVER_URL, {
       transports: ["websocket"],
-      timeout: 3000
+      timeout: 3000,
     });
 
     socket.on("connect", () => setConnected(true));
@@ -26,16 +46,22 @@ export default function App() {
     socket.on("connect_error", () => setConnected(false));
 
     socket.on("state:update", (payload) => {
-      const incoming = Array.isArray(payload?.pages) ? payload.pages : [];
-      const trimmed = incoming.slice(0, MAX_PAGES);
+      const incoming = Array.isArray(payload?.pages) ? payload.pages : [0];
 
-      setPages(trimmed);
-      setSelectedIndex((i) => Math.min(i, Math.max(0, trimmed.length - 1)));
-      setIsEnd(Boolean(payload?.isEnd) || trimmed.length >= MAX_PAGES);
+      // Keep everything server sends, but make sure 0 exists
+      const safe = incoming.length ? incoming : [0];
+      const hasZero = safe[0] === 0 ? safe : [0, ...safe.filter((p) => p !== 0)];
+
+      setPages(hasZero);
+      setSelectedIndex((i) => Math.min(i, Math.max(0, hasZero.length - 1)));
+      setIsEnd(Boolean(payload?.isEnd));
     });
 
     return () => socket.disconnect();
   }, []);
+
+  // Display count should show added pages out of 10 (excluding 0)
+  const addedCount = Math.max(0, pages.length - 1);
 
   const statusText = !connected ? "OFFLINE" : isEnd ? "THE END" : "LIVE";
 
@@ -52,7 +78,7 @@ export default function App() {
           <div className="metaRow">
             <span className="label">PAGES</span>
             <span className="value">
-              {pages.length}/{MAX_PAGES}
+              {addedCount}/{MAX_ADDED_PAGES}
             </span>
           </div>
           <div className="metaRow">
@@ -73,12 +99,15 @@ export default function App() {
           <div className="frame">
             {!connected && <div className="placeholder">Waiting for server…</div>}
 
-            {connected && selectedPage && (
-              <img
-                className="centerImg"
-                src={`/${selectedPage}.png`}
-                alt={`Page ${selectedPage}`}
-              />
+            {connected && selectedPage != null && (
+              <>
+                <img
+                  className="centerImg"
+                  src={`/${selectedPage}.png`}
+                  alt={`Page ${selectedPage}`}
+                />
+                <div className="caption">{captionText}</div>
+              </>
             )}
 
             {connected && pages.length === 0 && (
@@ -87,7 +116,8 @@ export default function App() {
 
             {isEnd && (
               <div className="endOverlay">
-                <div className="endText">THE END</div>
+                <div className="endText">{outcomeText}</div>
+                <div className="endSub">THE END</div>
               </div>
             )}
           </div>
@@ -104,7 +134,6 @@ export default function App() {
               </button>
             ))}
           </div>
-
         </section>
 
         {/* RIGHT */}
