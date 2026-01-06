@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
 const SERVER_URL = "http://localhost:5000";
@@ -16,6 +16,9 @@ export default function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isEnd, setIsEnd] = useState(false);
   const [connected, setConnected] = useState(false);
+
+  // NEW: track previous length so we can detect when a page was added
+  const prevLenRef = useRef(1); // starts with [0]
 
   const selectedPage = useMemo(() => {
     if (!pages || pages.length === 0) return null;
@@ -53,12 +56,22 @@ export default function App() {
       const hasZero = safe[0] === 0 ? safe : [0, ...safe.filter((p) => p !== 0)];
 
       setPages(hasZero);
-      setSelectedIndex((i) => Math.min(i, Math.max(0, hasZero.length - 1)));
       setIsEnd(Boolean(payload?.isEnd));
     });
 
     return () => socket.disconnect();
   }, []);
+
+  // NEW: whenever a new page is added, auto-select the last one
+  useEffect(() => {
+    if (pages.length > prevLenRef.current) {
+      setSelectedIndex(pages.length - 1);
+    } else {
+      // keep selection in bounds if server sends a shorter list
+      setSelectedIndex((i) => Math.min(i, pages.length - 1));
+    }
+    prevLenRef.current = pages.length;
+  }, [pages]);
 
   // Display count should show added pages out of 10 (excluding 0)
   const addedCount = Math.max(0, pages.length - 1);
@@ -138,7 +151,11 @@ export default function App() {
 
         {/* RIGHT */}
         <section className="panel">
-          <img className="hero flipX" src="/washingmachine.png" alt="Washing Machine" />
+          <img
+            className="hero flipX"
+            src="/washingmachine.png"
+            alt="Washing Machine"
+          />
         </section>
       </main>
     </div>

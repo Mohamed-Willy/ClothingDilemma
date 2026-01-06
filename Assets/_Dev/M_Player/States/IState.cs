@@ -7,7 +7,5 @@ namespace M_Player
         public void Begin();
 
         public void Update();
-
-        public void End();
     }
 }

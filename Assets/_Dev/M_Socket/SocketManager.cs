@@ -64,44 +64,22 @@ namespace M_Socket
             string jsonBody = $"{{\"page\":{page}}}";
             byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
 
-            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
-            {
-                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
-                req.downloadHandler = new DownloadHandlerBuffer();
-                req.SetRequestHeader("Content-Type", "application/json");
+            using UnityWebRequest req = new(url, "POST");
+            req.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
 
-                yield return req.SendWebRequest();
-
-                if (req.result != UnityWebRequest.Result.Success)
-                {
-                    Debug.LogError($"[SocketManager] API Error: {req.error}");
-                }
-                else
-                {
-                    Debug.Log($"[SocketManager] Page {page} sent successfully");
-                }
-            }
+            yield return req.SendWebRequest();
         }
 
         private IEnumerator PostReset()
         {
             string url = $"{serverUrl}/api/reset";
 
-            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
-            {
-                req.downloadHandler = new DownloadHandlerBuffer();
+            using UnityWebRequest req = new(url, "POST");
+            req.downloadHandler = new DownloadHandlerBuffer();
 
-                yield return req.SendWebRequest();
-
-                if (req.result != UnityWebRequest.Result.Success)
-                {
-                    Debug.LogError($"[SocketManager] Reset Error: {req.error}");
-                }
-                else
-                {
-                    Debug.Log("[SocketManager] Story reset successfully");
-                }
-            }
+            yield return req.SendWebRequest();
         }
     }
 }
